@@ -8,34 +8,16 @@
 # Software Foundation; either version 2 of the License, or (at your option)
 # any later version.
 #
+# Author: Johnny Brown
 
 import numpy as np
+import random as r
 from itertools import permutations, product
 
-class unique_element:
-    def __init__(self,value,occurrences):
-        self.value = value
-        self.occurrences = occurrences
+from scipy import stats
 
-def perm_unique(elements):
-    eset=set(elements)
-    listunique = [unique_element(i,elements.count(i)) for i in eset]
-    u=len(elements)
-    return perm_unique_helper(listunique,[0]*u,u-1)
 
-def perm_unique_helper(listunique,result_list,d):
-    if d < 0:
-        yield tuple(result_list)
-    else:
-        for i in listunique:
-            if i.occurrences > 0:
-                result_list[d]=i.value
-                i.occurrences-=1
-                for g in  perm_unique_helper(listunique,result_list,d-1):
-                    yield g
-                i.occurrences+=1
-
-def permanova(dm, levels, permutations = 200):
+def permanova_oneway(dm, levels, permutations = 200):
     """ 
     Performs one-way permutational ANOVA on the given distance matrix.
 
@@ -96,45 +78,123 @@ def permanova(dm, levels, permutations = 200):
     nf = 0
 
     #TODO make this pretty with math and functions
-    for perm in perm_unique(levels):
-        f = f_oneway(dm,perm)
-        nf += 1#figure out the math to just calc this
+    #perms = r.sample(list(perm_unique(levels)),permutations)
+    shuffledlevels = list(levels)#copy list so we can shuffle it
+    
+    for i in xrange(permutations):
+        r.shuffle(shuffledlevels)
+        f = f_oneway(dm,shuffledlevels)
+        
         if f >= bigf:
             above += 1
 
-        if nf == permutations:
-            break
-
         #debug
-        print perm
-        print f
+        ## print shuffledlevels
+        ## print f
 
-    p = above/float(nf)
+    p = above/float(permutations)
 
     return (bigf,p)
 
+#FIXME the right way to reuse code for one-way and n-way is to add an arg f such that
+#f(levels[i],levels[j]) returns True iff dm[i][j] should be included in the
+#desired sum of squares
 def f_oneway(dm,levels):
     bign = len(levels)#number of observations
     dm = np.asarray(dm)#distance matrix
-    n = len(set(levels))#observations per level/treatment group
-    a = bign/n#number of levels
+    a = len(set(levels))#number of levels
+    n = bign/a#number of observations per level
     
     assert dm.shape == (bign,bign) #check the dist matrix is square and the size
                                    #corresponds to the length of levels
 
     #total sum of squared distances                                   
-    sst = sum(sum(d**2 for d in r) for r in 
+    sst = np.sum(stats.ss(r) for r in 
               (s[n+1:] for n,s in enumerate(dm[:-1])) )/float(bign)
 
     #sum of within-group squares
     #itertools.combinations(xrange(len(dm)),2)#top half of dm
-    ssw = sum((dm[i][j]**2 for i,j in  
+    ssw = np.sum((dm[i][j]**2 for i,j in  
                product(xrange(len(dm)),xrange(1,len(dm)))
                if i<j and levels[i] == levels[j]))/float(n)
 
     ssa = sst - ssw
 
     fstat = (ssa/float(a-1))/(ssw/float(bign-a))
+    #print (fstat,sst,ssa,ssw,a,bign,n)
 
     return fstat
+
+def permanova_twoway(dm,levels,permutations=200):
+    """
+    factorial two-way manova
+    
+    dm is the dist. matrix as usual
+    levels is a list of ordered pairs [(a1,b1),(a2,b2),...,(ax,by)]
+    where ax gives the a-level of an observation and by gives the b-level
+    """
+
+    bigf_i, bigf_a, bigf_b = f_twoway(dm,levels)
+
+    above_i = above_a = above_b = 0
+
+    #TODO make this pretty with math and functions
+    #perms = r.sample(list(perm_unique(levels)),permutations)
+    shuffledlevels = list(levels)#copy list so we can shuffle it
+    
+    for i in xrange(permutations):
+        r.shuffle(shuffledlevels)
+        f_i, f_a, f_b = f_twoway(dm,shuffledlevels)
+
+        #this is definitely the wrong way to do the permutations. wrong as in
+        #incorrect
+        for f,bigf,above in zip([f_i, f_a, f_b],
+                                [bigf_i, bigf_a, bigf_b],
+                                [above_i, above_a, above_b]):
+            if f >= bigf:
+                above += 1
+
+
+    p_i,p_a,p_b = [ above/float(permutations) for above in 
+                    [above_i, above_a, above_b]]
+
+    return (p_i, p_a, p_b)
+
+    
+    
+def f_twoway(dm, levels):
+    
+    bign = len(levels)#number of observations
+    dm = np.asarray(dm)#distance matrix
+    l = len(set(levels))#number of levels
+    a = len(set([l[0] for l in levels]))#number of a-levels
+    b = len(set([l[1] for l in levels]))#number of a-levels
+    n = bign/a#number of observations per level
+    
+    sst = np.sum(stats.ss(r) for r in 
+            (s[n+1:] for n,s in enumerate(dm[:-1])) )/float(bign)
+
+    ssr = np.sum((dm[i][j]**2 for i,j in  
+               product(xrange(len(dm)),xrange(1,len(dm)))
+               if i<j and levels[i] == levels[j]))/float(n)#same level of both a and b (error, within-group)
+
+    
+    sswa = np.sum((dm[i][j]**2 for i,j in  
+               product(xrange(len(dm)),xrange(1,len(dm)))
+               if i<j and levels[i][0] == levels[j][0]))/float(a*n)#same level of a
+
+    sswb = np.sum((dm[i][j]**2 for i,j in
+               product(xrange(len(dm)),xrange(1,len(dm)))
+               if i<j and levels[i][1] == levels[j][1]))/float(b*n)#same level of b
+
+    ssa = sst - sswa
+    ssb = sst - sswb
+    ssab = sst - ssa - ssb - ssr #interaction s-squares
+
+    #these should each be separate functions?
+    f_interaction = (ssab/float((a-1)*(b-1)))/(ssr/float(bign - a*b))
+    f_a = (ssa/float((a-1)))/(ssr/float(bign - a*b))
+    f_b = (ssb/float((b-1)))/(ssr/float(bign - a*b))
+
+    return (f_interaction,f_a,f_b)
     

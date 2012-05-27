@@ -4,15 +4,6 @@
 # temporary vi files.
 *.sw*
 
-# framework related stuff..
-.htaccess
-config.py
-framework/tmp/*
-framework/analyses/*
-framework/errors/*
-framework/blastdb/*
-framework/trash/*
-
 #nonsense
 *.DS_Store
 *~
@@ -21,5 +12,4 @@ framework/trash/*
 \#*
 .#*
 
-#R command history
-.Rhistoryplaydata/*
+test/test_data/*
