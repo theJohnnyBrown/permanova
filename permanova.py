@@ -12,10 +12,17 @@
 
 import numpy as np
 import random as r
-from itertools import permutations, product
+from itertools import permutations, product, chain
 
 from scipy import stats
+stats.ss = lambda l: sum(a*a for a in l)
 
+def above_diagonal(n):
+    row = xrange(n)
+    for i in row:
+        for j in xrange(i+1,n):
+            yield i,j
+    
 
 def permanova_oneway(dm, levels, permutations = 200):
     """ 
@@ -141,18 +148,41 @@ def permanova_twoway(dm,levels,permutations=200):
     #TODO make this pretty with math and functions
     #perms = r.sample(list(perm_unique(levels)),permutations)
     shuffledlevels = list(levels)#copy list so we can shuffle it
+
+    a_levels = list([l[0] for l in levels])
+    b_levels = list([l[1] for l in levels])
     
+    #permutations
     for i in xrange(permutations):
+        #All these are probably the wrong way to do the permutations. Wrong as in
+        #incorrect
+        ## r.shuffle(a_levels)
+        ## r.shuffle(b_levels)
+        ## shuffledlevels = zip(a_levels,b_levels)
+
         r.shuffle(shuffledlevels)
+        
         f_i, f_a, f_b = f_twoway(dm,shuffledlevels)
 
-        #this is definitely the wrong way to do the permutations. wrong as in
-        #incorrect
-        for f,bigf,above in zip([f_i, f_a, f_b],
-                                [bigf_i, bigf_a, bigf_b],
-                                [above_i, above_a, above_b]):
-            if f >= bigf:
-                above += 1
+        if f_i > bigf_i:
+            above_i += 1
+
+    for i in xrange(permutations):
+        r.shuffle(a_levels)
+
+        f_i, f_a, f_b = f_twoway(dm,zip(a_levels, [l[1] for l in levels]))
+
+        if f_a > bigf_a:
+            above_a += 1
+
+    for i in xrange(permutations):
+        r.shuffle(b_levels)
+
+        f_i, f_a, f_b = f_twoway(dm,zip([l[0] for l in levels], b_levels))
+            
+        if f_b > bigf_b:
+            above_b += 1
+
 
 
     p_i,p_a,p_b = [ above/float(permutations) for above in 
@@ -168,25 +198,30 @@ def f_twoway(dm, levels):
     dm = np.asarray(dm)#distance matrix
     l = len(set(levels))#number of levels
     a = len(set([l[0] for l in levels]))#number of a-levels
-    b = len(set([l[1] for l in levels]))#number of a-levels
-    n = bign/a#number of observations per level
-    
-    sst = np.sum(stats.ss(r) for r in 
-            (s[n+1:] for n,s in enumerate(dm[:-1])) )/float(bign)
+    b = len(set([l[1] for l in levels]))#number of b-levels
+    n = bign/float(a*b)#number of observations per level
 
+    #sum of all distances
+    ## sst = np.sum(stats.ss(r) for r in 
+    ##         (s[n+1:] for n,s in enumerate(dm[:-1])) )/float(bign)
+    sst = stats.ss(chain(*(r[i+1:] for i,r in enumerate(dm))))/float(bign)
+
+    #same level of both a and b (error, within-group)
     ssr = np.sum((dm[i][j]**2 for i,j in  
                product(xrange(len(dm)),xrange(1,len(dm)))
-               if i<j and levels[i] == levels[j]))/float(n)#same level of both a and b (error, within-group)
+               if i<j and levels[i] == levels[j]))/float(n)
 
-    
+    #same level of a
     sswa = np.sum((dm[i][j]**2 for i,j in  
                product(xrange(len(dm)),xrange(1,len(dm)))
-               if i<j and levels[i][0] == levels[j][0]))/float(a*n)#same level of a
+               if i<j and levels[i][0] == levels[j][0]))/float(b*n)
 
+    #same level of b
     sswb = np.sum((dm[i][j]**2 for i,j in
                product(xrange(len(dm)),xrange(1,len(dm)))
-               if i<j and levels[i][1] == levels[j][1]))/float(b*n)#same level of b
+               if i<j and levels[i][1] == levels[j][1]))/float(a*n)
 
+    
     ssa = sst - sswa
     ssb = sst - sswb
     ssab = sst - ssa - ssb - ssr #interaction s-squares
@@ -198,3 +233,18 @@ def f_twoway(dm, levels):
 
     return (f_interaction,f_a,f_b)
     
+def f_stat(dm,levels, df_numerator, df_denominator, included_numerator, included_denominator):
+    
+    bign = len(dm)
+
+    distances_numerator = (dm[i][j] for i,j in above_diagonal(bign) 
+                           if included_numerator(levels[i], levels[j]))
+    numerator = stats.ss(distances_numerator)/float(df_numerator)
+
+    distances_denominator = (dm[i][j] for i,j in above_diagonal(bign)
+                             if included_denominator(levels[i], levels[j]))
+    denominator = stats.ss(distances_numerator)/float(df_denominator)
+
+    return numerator/denominator
+
+
