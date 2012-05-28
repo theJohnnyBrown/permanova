@@ -207,19 +207,13 @@ def f_twoway(dm, levels):
     sst = stats.ss(chain(*(r[i+1:] for i,r in enumerate(dm))))/float(bign)
 
     #same level of both a and b (error, within-group)
-    ssr = np.sum((dm[i][j]**2 for i,j in  
-               product(xrange(len(dm)),xrange(1,len(dm)))
-               if i<j and levels[i] == levels[j]))/float(n)
+    ssr = select_ss(dm, levels, lambda a,b: a==b)/float(n)
 
     #same level of a
-    sswa = np.sum((dm[i][j]**2 for i,j in  
-               product(xrange(len(dm)),xrange(1,len(dm)))
-               if i<j and levels[i][0] == levels[j][0]))/float(b*n)
+    sswa = select_ss(dm, levels, lambda a,b: a[0] == b[0])/float(b*n)
 
     #same level of b
-    sswb = np.sum((dm[i][j]**2 for i,j in
-               product(xrange(len(dm)),xrange(1,len(dm)))
-               if i<j and levels[i][1] == levels[j][1]))/float(a*n)
+    sswb = select_ss(dm, levels, lambda a,b: a[1] == b[1])/float(a*n)
 
     
     ssa = sst - sswa
@@ -232,19 +226,19 @@ def f_twoway(dm, levels):
     f_b = (ssb/float((b-1)))/(ssr/float(bign - a*b))
 
     return (f_interaction,f_a,f_b)
-    
-def f_stat(dm,levels, df_numerator, df_denominator, included_numerator, included_denominator):
+
+def f_twoway_interaction(dm,levels):
+    def inc_num(a,b):
+        pass
+    pass
+
+def select_ss(dm, levels,  included):
     
     bign = len(dm)
 
-    distances_numerator = (dm[i][j] for i,j in above_diagonal(bign) 
-                           if included_numerator(levels[i], levels[j]))
-    numerator = stats.ss(distances_numerator)/float(df_numerator)
+    distances = (dm[i][j] for i,j in above_diagonal(bign) 
+                           if included(levels[i], levels[j]))
 
-    distances_denominator = (dm[i][j] for i,j in above_diagonal(bign)
-                             if included_denominator(levels[i], levels[j]))
-    denominator = stats.ss(distances_numerator)/float(df_denominator)
-
-    return numerator/denominator
+    return stats.ss(distances)
 
 
