@@ -82,7 +82,7 @@ def permanova_oneway(dm, levels, permutations = 200):
 
     .. [2] Anderson, Marti. A new method for non-parametric multivariate analysis 
            of variance. 2001. 
-           http://stg-entsoc.bivings.com/PDF/MUVE/6_NewMethod_MANOVA1_2.pdf
+           http://www.entsoc.org/PDF/MUVE/6_NewMethod_MANOVA1_2.pdf
     
     .. [3] Jones, James. Lecture notes for Concepts of Statistics
            http://people.richland.edu/james/lecture/m170/ch13-2wy.html
